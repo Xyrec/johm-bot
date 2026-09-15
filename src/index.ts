@@ -13,6 +13,7 @@ import {
 } from "discord.js";
 import { readFileSync } from "node:fs";
 import { loadConfig, type ButtonConfig, type PickerConfig } from "./config.js";
+import { memeIntents, registerMemes } from "./meme.js";
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -30,8 +31,10 @@ const roleIds = new Map<string, Map<string, string>>();
 const iconEmojis = new Map<string, { id: string; name: string }>();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, ...memeIntents],
 });
+
+registerMemes(client);
 
 // ---------- Buttons ----------
 

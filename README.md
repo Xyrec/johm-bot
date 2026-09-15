@@ -65,11 +65,17 @@ needs a rebuild. `emoji` wins over `icon` when both are set.
 - **multi** mode: pressing toggles the role. Reply: "Added **Tank**" or "Removed **Tank**".
 - Failures are logged and the user sees "Something went wrong while changing your roles."
 
+## Memes
+
+Everything non-essential lives in `src/meme.ts`. Currently: any message whose letters contain
+"johm" (so "Johm", "jo hm", "j-o-h-m") gets a reply of "Johm". Bot messages are ignored.
+
 ## Discord setup
 
 Done once in the [Developer Portal](https://discord.com/developers/applications):
 
-1. Bot tab: copy the token into `.env`. Enable **Server Members Intent**. Public Bot can stay off
+1. Bot tab: copy the token into `.env`. Enable **Server Members Intent** and **Message Content
+   Intent** (the latter is for the meme features in `src/meme.ts`). Public Bot can stay off
    (set Installation > Install Link to None first).
 2. OAuth2 > URL Generator: scopes `bot` and `applications.commands`; permissions Manage Roles,
    View Channels, Send Messages, Read Message History. Open the URL to invite the bot.
