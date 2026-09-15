@@ -1,0 +1,36 @@
+{
+  "pickers": [
+    {
+      "id": "class",
+      "label": "class",
+      "channelId": "1549409745738145852",
+      "messageId": "1549420636172976239",
+      "content": "**Choose your class**\nPick the class you play and your name will show its class color.",
+      "mode": "single",
+      "buttons": [
+        { "role": "Druid", "color": "#ff7c0a", "icon": "assets/class-icons/wiki_druid.png" },
+        { "role": "Hunter", "color": "#aad372", "icon": "assets/class-icons/wiki_hunter.png" },
+        { "role": "Mage", "color": "#3fc7eb", "icon": "assets/class-icons/wiki_mage.png" },
+        { "role": "Paladin", "color": "#f48cba", "icon": "assets/class-icons/wiki_paladin.png" },
+        { "role": "Priest", "color": "#ffffff", "icon": "assets/class-icons/wiki_priest.png" },
+        { "role": "Rogue", "color": "#fff468", "icon": "assets/class-icons/wiki_rogue.png" },
+        { "role": "Shaman", "color": "#0070dd", "icon": "assets/class-icons/wiki_shaman.png" },
+        { "role": "Warlock", "color": "#8788ee", "icon": "assets/class-icons/wiki_warlock.png" },
+        { "role": "Warrior", "color": "#c69b6d", "icon": "assets/class-icons/wiki_warrior.png" }
+      ]
+    },
+    {
+      "id": "role",
+      "label": "role",
+      "channelId": "1549409745738145852",
+      "messageId": "1549420639268507720",
+      "content": "**Choose your roles**\nPick the roles you play so people can @mention Tanks, Healers or DPS.",
+      "mode": "multi",
+      "buttons": [
+        { "role": "Tank" },
+        { "role": "Healer" },
+        { "role": "DPS" }
+      ]
+    }
+  ]
+}
