@@ -1,0 +1,11 @@
+services:
+  bot:
+    build: .
+    container_name: johm-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Mount config.json so you can edit pickers on the server and just restart,
+    # without rebuilding the image.
+    volumes:
+      - ./config.json:/app/config.json:ro
