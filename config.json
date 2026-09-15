@@ -27,9 +27,9 @@
       "content": "**Choose your roles**\nPick the roles you play so people can @mention Tanks, Healers or DPS.",
       "mode": "multi",
       "buttons": [
-        { "role": "Tank" },
-        { "role": "Healer" },
-        { "role": "DPS" }
+        { "role": "Tank", "icon": "assets/role-icons/tank.png" },
+        { "role": "Healer", "icon": "assets/role-icons/healer.png" },
+        { "role": "DPS", "icon": "assets/role-icons/dps.png" }
       ]
     }
   ]
