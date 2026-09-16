@@ -3,12 +3,17 @@ import {
   ButtonBuilder,
   ButtonStyle,
   Client,
+  ComponentType,
   Events,
   GatewayIntentBits,
   MessageFlags,
+  type APIActionRowComponent,
+  type APIComponentInMessageActionRow,
   type ButtonInteraction,
   type Guild,
   type GuildMember,
+  type GuildTextBasedChannel,
+  type Message,
   type Role,
 } from "discord.js";
 import { readFileSync } from "node:fs";
@@ -71,7 +76,7 @@ function buildRows(picker: PickerConfig): ActionRowBuilder<ButtonBuilder>[] {
   return rows;
 }
 
-// ---------- Startup: emojis, roles and messages ----------
+// ---------- Startup: emojis and roles ----------
 
 function hexToInt(hex: string): number {
   return parseInt(hex.slice(1), 16);
@@ -120,16 +125,8 @@ async function ensureRole(guild: Guild, button: ButtonConfig): Promise<Role> {
   return role;
 }
 
-async function syncPicker(picker: PickerConfig): Promise<void> {
-  const channel = await client.channels.fetch(picker.channelId);
-  if (!channel || !channel.isTextBased() || channel.isDMBased()) {
-    console.error(`Picker "${picker.id}": channel ${picker.channelId} is not a server text channel. Skipping.`);
-    return;
-  }
-  const guild = channel.guild;
-  await guild.roles.fetch();
+async function ensureRoles(guild: Guild, picker: PickerConfig): Promise<void> {
   const me = await guild.members.fetchMe();
-
   const ids = new Map<string, string>();
   for (const button of picker.buttons) {
     const role = await ensureRole(guild, button);
@@ -142,22 +139,106 @@ async function syncPicker(picker: PickerConfig): Promise<void> {
     }
   }
   roleIds.set(picker.id, ids);
+}
 
-  const payload = { content: picker.content, components: buildRows(picker) };
-  if (picker.messageId) {
-    const message = await channel.messages.fetch(picker.messageId);
-    if (message.author.id !== client.user?.id) {
-      console.error(`Picker "${picker.id}": message ${picker.messageId} was not sent by this bot, so it cannot be edited. Clear messageId to post a new one.`);
-      return;
+// ---------- Startup: picker messages ----------
+//
+// The bot never edits a picker message (that would show "(edited)"). Instead it finds its own
+// picker messages in the channel by their button ids, keeps the ones that already match config,
+// and deletes + re-posts the rest. To keep config order, everything from the first changed
+// picker onwards in a channel is re-posted.
+
+type ApiRows = APIActionRowComponent<APIComponentInMessageActionRow>[];
+
+/** Which picker a message belongs to, judged by its first picker button. */
+function pickerIdOfMessage(message: Message): string | null {
+  for (const row of message.components) {
+    if (row.type !== ComponentType.ActionRow) continue;
+    for (const c of row.components) {
+      if (c.type === ComponentType.Button && c.customId) return parseCustomId(c.customId)?.pickerId ?? null;
     }
-    await message.edit(payload);
-    console.log(`Picker "${picker.id}": synced message ${picker.messageId} in #${channel.name}`);
-  } else {
-    const message = await channel.send(payload);
-    console.log(
-      `Picker "${picker.id}": posted new message ${message.id} in #${channel.name}. ` +
-        `Set "messageId": "${message.id}" in config.json so future restarts edit it instead of posting again.`,
-    );
+  }
+  return null;
+}
+
+/** A stable string of everything that matters for "does this message match the config". */
+function fingerprint(content: string, rows: ApiRows): string {
+  const buttons = rows.map((row) =>
+    row.components.map((c) =>
+      c.type === ComponentType.Button && "custom_id" in c
+        ? {
+            id: c.custom_id,
+            label: c.label ?? null,
+            style: c.style,
+            emoji: c.emoji?.id ?? c.emoji?.name ?? null,
+          }
+        : { type: c.type },
+    ),
+  );
+  return JSON.stringify({ content, buttons });
+}
+
+function messageRows(message: Message): ApiRows {
+  return message.components
+    .filter((row) => row.type === ComponentType.ActionRow)
+    .map((row) => row.toJSON() as APIActionRowComponent<APIComponentInMessageActionRow>);
+}
+
+async function syncChannel(channelId: string, pickers: PickerConfig[]): Promise<void> {
+  const channel = await client.channels.fetch(channelId);
+  if (!channel || !channel.isTextBased() || channel.isDMBased()) {
+    console.error(`Channel ${channelId} is not a server text channel. Skipping its pickers.`);
+    return;
+  }
+  const textChannel = channel as GuildTextBasedChannel;
+  await textChannel.guild.roles.fetch();
+  for (const picker of pickers) await ensureRoles(textChannel.guild, picker);
+
+  // Find our existing picker messages. Oldest one per picker wins; newer duplicates and
+  // messages for pickers no longer in config are deleted.
+  const recent = await textChannel.messages.fetch({ limit: 100 });
+  const existing = new Map<string, Message>();
+  const wanted = new Set(pickers.map((p) => p.id));
+  for (const message of [...recent.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp)) {
+    if (message.author.id !== client.user?.id) continue;
+    const pickerId = pickerIdOfMessage(message);
+    if (!pickerId) continue;
+    if (wanted.has(pickerId) && !existing.has(pickerId)) {
+      existing.set(pickerId, message);
+    } else {
+      await message.delete();
+      console.log(`Deleted stray picker message ${message.id} (${pickerId}) in #${textChannel.name}`);
+    }
+  }
+
+  // First picker that is missing, differs from config, or is out of order.
+  const desired = pickers.map((p) => ({ content: p.content, components: buildRows(p) }));
+  let first = -1;
+  let lastTimestamp = 0;
+  for (let i = 0; i < pickers.length; i++) {
+    const message = existing.get(pickers[i]!.id);
+    const want = fingerprint(desired[i]!.content, desired[i]!.components.map((r) => r.toJSON()));
+    if (!message || fingerprint(message.content, messageRows(message)) !== want || message.createdTimestamp < lastTimestamp) {
+      first = i;
+      break;
+    }
+    lastTimestamp = message.createdTimestamp;
+  }
+  if (first === -1) {
+    console.log(`#${textChannel.name}: ${pickers.length} picker message(s) up to date`);
+    return;
+  }
+
+  for (let i = first; i < pickers.length; i++) {
+    const message = existing.get(pickers[i]!.id);
+    if (message) {
+      await message.delete();
+      console.log(`Picker "${pickers[i]!.id}": deleted message ${message.id} in #${textChannel.name}`);
+    }
+  }
+  for (let i = first; i < pickers.length; i++) {
+    const message = await textChannel.send(desired[i]!);
+    console.log(`Picker "${pickers[i]!.id}": posted message ${message.id} in #${textChannel.name}`);
   }
 }
 
@@ -205,7 +286,13 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (err) {
+    // Interaction expired or was already answered (e.g. two bot instances running). Nothing to do.
+    console.warn(`Could not acknowledge ${picker.id}/${parsed.role} for ${interaction.user.tag}:`, err instanceof Error ? err.message : err);
+    return;
+  }
   try {
     // Force a fresh fetch so we don't act on stale cached roles.
     const member = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
@@ -232,11 +319,17 @@ client.once(Events.ClientReady, async (c) => {
   } catch (err) {
     console.error("Failed to upload icon emojis, buttons will show without icons:", err);
   }
+
+  // Group pickers by channel, preserving config order within each channel.
+  const byChannel = new Map<string, PickerConfig[]>();
   for (const picker of config.pickers) {
+    byChannel.set(picker.channelId, [...(byChannel.get(picker.channelId) ?? []), picker]);
+  }
+  for (const [channelId, pickers] of byChannel) {
     try {
-      await syncPicker(picker);
+      await syncChannel(channelId, pickers);
     } catch (err) {
-      console.error(`Picker "${picker.id}" failed to sync:`, err);
+      console.error(`Pickers in channel ${channelId} failed to sync:`, err);
     }
   }
   console.log("Ready.");

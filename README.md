@@ -13,17 +13,20 @@ docker compose logs -f
 
 Locally with Podman the same file works: `podman compose up -d --build`.
 
-## First start
+## How picker messages are managed
 
-Each picker in `config.json` has a `messageId`. Leave it empty the first time. On startup the bot
-posts the picker message in the configured channel and logs a line like:
+The bot owns its picker messages and never edits them (that would show "(edited)"). On every start it
+looks through the last 100 messages of each picker channel for its own messages with picker buttons,
+compares them to `config.json`, and:
 
-```
-Picker "class": posted new message 1234567890 in #auto-roles. Set "messageId": "1234567890" in config.json ...
-```
+- leaves messages alone that already match,
+- deletes and re-posts any picker that is missing, changed, or out of order (everything from the first
+  changed picker onwards in that channel is re-posted, so config order is preserved),
+- deletes its own picker messages for pickers that were removed from config.
 
-Paste that id into `config.json` and restart. From then on every restart edits that message in place,
-so changing the text or buttons is just: edit `config.json`, `docker compose restart`.
+So changing text or buttons is just: edit `config.json`, `docker compose restart`. No message ids to
+copy anywhere. The bot needs View Channel, Send Messages, Manage Messages and Read Message History in
+the picker channel.
 
 `config.json` is mounted into the container, so config changes never need a rebuild. Code changes do
 (`docker compose up -d --build`).
@@ -37,7 +40,6 @@ so changing the text or buttons is just: edit `config.json`, `docker compose res
       "id": "class",                // used inside button ids; letters, digits, - and _
       "label": "class",             // used in replies: "Your class is now Mage"
       "channelId": "…",
-      "messageId": "",              // empty on first run, then the id the bot logged
       "content": "Message text",
       "mode": "single",             // "single": one role at a time. "multi": buttons toggle
       "buttons": [
@@ -78,7 +80,7 @@ Done once in the [Developer Portal](https://discord.com/developers/applications)
    Intent** (the latter is for the meme features in `src/meme.ts`). Public Bot can stay off
    (set Installation > Install Link to None first).
 2. OAuth2 > URL Generator: scopes `bot` and `applications.commands`; permissions Manage Roles,
-   View Channels, Send Messages, Read Message History. Open the URL to invite the bot.
+   View Channels, Send Messages, Manage Messages, Read Message History. Open the URL to invite the bot.
 3. Server Settings > Roles: drag the bot's role above every role it manages. The bot warns at startup
    if this is wrong.
 

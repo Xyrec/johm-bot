@@ -25,8 +25,6 @@ export interface PickerConfig {
   /** Word used in replies, e.g. "class" -> "Your class is now Mage". */
   label: string;
   channelId: string;
-  /** Leave empty the first time; the bot posts the message and logs the id. */
-  messageId: string;
   content: string;
   /** "single": one role from this picker at a time. "multi": buttons toggle roles. */
   mode: PickerMode;
@@ -64,9 +62,6 @@ export function loadConfig(path: string): BotConfig {
     if (typeof picker.label !== "string" || picker.label.length === 0) fail(`${where}.label is required`);
     if (typeof picker.channelId !== "string" || !SNOWFLAKE_PATTERN.test(picker.channelId)) {
       fail(`${where}.channelId must be a Discord channel id`);
-    }
-    if (typeof picker.messageId !== "string" || (picker.messageId !== "" && !SNOWFLAKE_PATTERN.test(picker.messageId))) {
-      fail(`${where}.messageId must be empty or a Discord message id`);
     }
     if (typeof picker.content !== "string" || picker.content.length === 0) fail(`${where}.content is required`);
     if (picker.mode !== "single" && picker.mode !== "multi") fail(`${where}.mode must be "single" or "multi"`);
